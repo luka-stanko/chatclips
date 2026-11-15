@@ -51,8 +51,8 @@ You need:
   a local file
 
 ```bash
-git clone https://github.com/<you>/chat-clips.git
-cd chat-clips
+git clone https://github.com/luka-stanko/chatclips.git
+cd chatclips
 node chat-clips.mjs --help
 ```
 
