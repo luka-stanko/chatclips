@@ -38,8 +38,9 @@ chat activity (busiest 10s bucket: 340 messages), numbers mark the clips
    20 seconds before the spike and runs 45 seconds.
 5. **Cut vertical.** ffmpeg cuts the window and lays it out in 9:16, either the
    full 16:9 frame over a blurred copy of itself (default) or a centre crop.
-   When the VOD is online, only the needed minutes are downloaded with yt-dlp,
-   never the whole six-hour stream.
+   When the VOD is online, yt-dlp resolves its stream once and ffmpeg seeks
+   straight to each moment: only the needed seconds are fetched, never the
+   whole six-hour stream.
 
 ## Install
 
@@ -70,7 +71,12 @@ Download*, paste the VOD link, format **JSON**. Or with the CLI:
 
 ```bash
 TwitchDownloaderCLI chatdownload --id 2345678901 -o chat.json
+
+# only part of a long VOD (use hh:mm:ss, e.g. hours 2 to 3:30)
+TwitchDownloaderCLI chatdownload --id 2345678901 -b 02:00:00 -e 03:30:00 -o chat.json
 ```
+
+A partial chat keeps its real VOD times, and the tool analyses that range only.
 
 **2. Run the tool:**
 
@@ -125,6 +131,14 @@ Any chat works if you convert it to a plain array:
 ```
 
 `t` is the number of seconds since the start of the video.
+
+## Tested on a real stream
+
+90 minutes of a GTA RP stream (17,778 chat messages, downloaded in 47 s with
+TwitchDownloaderCLI 1.56.5): `--top 3` found a botched golf drive ("LOL SO
+BAD"), a "LOL" x30 burst and a "Classic" x21 moment, and cut the three clips
+straight from the online VOD in under 5 minutes on a small server, 1080x1920
+with sound.
 
 ## Tuning tips
 

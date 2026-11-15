@@ -14,7 +14,7 @@
 //
 // Run with --help for every option. MIT licensed.
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 
@@ -29,7 +29,7 @@ const DEFAULTS = {
   window: 300,     // seconds of surrounding chat that define "normal"
   layout: "blur",  // blur | crop | none
   height: 1920,    // output height for vertical layouts (width = height * 9/16)
-  keywords: "lmao,lol,lul,kekw,omegalul,lmfao,pog,poggers,w,clip,clip it,clip that,no way,wtf,omg,holy,???,!!!",
+  keywords: "lmao,lol,lo,lul,kek,kekw,omegalul,lmfao,xd,icant,pepelaugh,huh,classic,ayoo,pog,poggers,w,clip,clip it,clip that,no way,wtf,omg,holy,???,!!!",
   keywordWeight: 0.5,
 };
 
@@ -119,14 +119,16 @@ function die(msg) {
 
 // ---------- reading the chat ----------
 
-// Returns { messages: [{t, msg, user}], duration, vodId, title }
+// Returns { messages: [{t, msg, user}], start, end, vodId, title }.
+// start/end are seconds in the VOD: a chat downloaded for part of a VOD
+// (TwitchDownloader -b/-e) keeps VOD-relative offsets, so only that range is analysed.
 export function readChat(path) {
   let raw;
   try { raw = JSON.parse(readFileSync(path, "utf8")); }
   catch (e) { die(`cannot read ${path} as JSON (${e.message})`); }
 
   let messages = [];
-  let duration = 0, vodId = null, title = null;
+  let start = null, end = null, vodId = null, title = null;
 
   if (Array.isArray(raw)) {
     // Minimal format: [{t, msg, user?}]
@@ -141,15 +143,17 @@ export function readChat(path) {
     const v = raw.video ?? {};
     vodId = v.id ? String(v.id) : null;
     title = v.title ?? null;
-    duration = Number(v.length ?? v.end ?? 0) || 0;
+    if (Number.isFinite(Number(v.start))) start = Number(v.start);
+    if (Number.isFinite(Number(v.end)) && Number(v.end) > 0) end = Number(v.end);
   } else {
     die(`${path} is not a TwitchDownloader chat export (no "comments" array)`);
   }
 
   messages = messages.filter((m) => Number.isFinite(m.t) && m.t >= 0).sort((a, b) => a.t - b.t);
   if (messages.length === 0) die(`${path} contains no chat messages`);
-  duration = Math.max(duration, messages[messages.length - 1].t);
-  return { messages, duration, vodId, title };
+  if (start === null || start > messages[0].t) start = 0;
+  if (end === null || end < messages[messages.length - 1].t) end = messages[messages.length - 1].t;
+  return { messages, start, end, vodId, title };
 }
 
 // ---------- detection ----------
@@ -177,14 +181,14 @@ function buildKeywordMatcher(list) {
 // Score every bucket against the chat activity around it, then keep the
 // strongest peaks that are at least `gap` seconds apart.
 export function findMoments(chat, opts) {
-  const { messages, duration } = chat;
-  const n = Math.max(1, Math.ceil((duration + 1) / opts.bucket));
+  const { messages, start: from, end: to } = chat;
+  const n = Math.max(1, Math.ceil((to - from + 1) / opts.bucket));
   const counts = new Array(n).fill(0);
   const weighted = new Array(n).fill(0);
   const isHype = buildKeywordMatcher(opts.keywords);
 
   for (const m of messages) {
-    const b = Math.min(n - 1, Math.floor(m.t / opts.bucket));
+    const b = Math.min(n - 1, Math.max(0, Math.floor((m.t - from) / opts.bucket)));
     counts[b] += 1;
     weighted[b] += 1 + (isHype(m.msg) ? opts.keywordWeight : 0);
   }
@@ -206,10 +210,10 @@ export function findMoments(chat, opts) {
   for (const i of order) {
     if (picked.length >= opts.top) break;
     if (scores[i] < opts.minScore) break;
-    const t = i * opts.bucket;
+    const t = from + i * opts.bucket;
     if (picked.some((p) => Math.abs(p.peak - t) < opts.gap)) continue;
     const start = Math.max(0, t - opts.lead);
-    const end = Math.min(duration, start + opts.length);
+    const end = Math.min(to + opts.lead, start + opts.length);
     const inside = messages.filter((m) => m.t >= t && m.t < t + opts.bucket);
     picked.push({
       peak: t,
@@ -245,7 +249,7 @@ function twitchTime(sec) {
   return `${Math.floor(s / 3600)}h${Math.floor((s % 3600) / 60)}m${s % 60}s`;
 }
 
-function chart(counts, bucket, moments, width = 100) {
+function chart(counts, bucket, moments, from, width = 100) {
   const per = Math.max(1, Math.ceil(counts.length / width));
   const cols = [];
   for (let i = 0; i < counts.length; i += per) cols.push(Math.max(...counts.slice(i, i + per)));
@@ -254,15 +258,15 @@ function chart(counts, bucket, moments, width = 100) {
   const line = cols.map((c) => (c === 0 ? " " : bars[Math.max(1, Math.round((c / max) * (bars.length - 1)))])).join("");
   const marks = new Array(cols.length).fill(" ");
   moments.forEach((m, idx) => {
-    const c = Math.min(cols.length - 1, Math.floor(m.peak / bucket / per));
+    const c = Math.min(cols.length - 1, Math.floor((m.peak - from) / bucket / per));
     marks[c] = idx < 9 ? String(idx + 1) : "+";
   });
-  const total = counts.length * bucket;
+  const total = from + counts.length * bucket;
   return [
     `chat activity (busiest ${bucket}s bucket: ${max} messages), numbers mark the clips`,
     line,
     marks.join(""),
-    `00:00:00${" ".repeat(Math.max(1, cols.length - 16))}${hms(total)}`,
+    `${hms(from)}${" ".repeat(Math.max(1, cols.length - 16))}${hms(total)}`,
   ].join("\n");
 }
 
@@ -280,15 +284,16 @@ function run(cmd, args) {
   return { ok: true };
 }
 
+// The video part of the ffmpeg filter graph, from [0:v:0] to [vout].
 function videoFilter(layout, height) {
   const w = Math.round((height * 9) / 16 / 2) * 2;
-  if (layout === "crop") return `crop=ih*9/16:ih,scale=${w}:${height},setsar=1`;
+  if (layout === "crop") return `[0:v:0]crop=ih*9/16:ih,scale=${w}:${height},setsar=1[vout]`;
   if (layout === "blur")
     return [
-      `split=2[bg][fg]`,
+      `[0:v:0]split=2[bg][fg]`,
       `[bg]scale=${w}:${height}:force_original_aspect_ratio=increase,crop=${w}:${height},boxblur=20:2[bgb]`,
       `[fg]scale=${w}:-2[fgs]`,
-      `[bgb][fgs]overlay=(W-w)/2:(H-h)/2,setsar=1`,
+      `[bgb][fgs]overlay=(W-w)/2:(H-h)/2,setsar=1[vout]`,
     ].join(";");
   return null;
 }
@@ -302,22 +307,35 @@ function resolveSource(vod, chat) {
   die(`--vod "${v}" is neither a file, a URL nor a Twitch VOD id`);
 }
 
-function cutClip(src, m, outFile, opts, tmpDir) {
-  let input = src.path, ss = m.start;
+// Ask yt-dlp once for the direct stream URL(s) of an online VOD. ffmpeg then
+// seeks straight to each clip inside the stream: only the needed seconds are
+// fetched and every clip is encoded once. (Downloading each section with
+// yt-dlp first was measured 2 to 3 times slower on a Twitch VOD.)
+function streamUrls(src) {
+  if (src.streams) return { ok: true };
+  const r = spawnSync("yt-dlp", ["-q", "--no-warnings", "-g", "-f", "b[height<=1080]/bv*[height<=1080]+ba/b", src.url], { encoding: "utf8" });
+  if (r.error || r.status !== 0) return { ok: false, err: (r.stderr || r.error?.message || "yt-dlp failed").trim().split("\n").slice(-3).join("\n") };
+  const urls = r.stdout.trim().split("\n").filter(Boolean);
+  if (urls.length === 0) return { ok: false, err: "yt-dlp returned no stream URL" };
+  src.streams = urls.slice(0, 2); // one muxed stream (Twitch), or video + audio
+  return { ok: true };
+}
+
+function cutClip(src, m, outFile, opts) {
+  const inputs = [];
   if (src.kind === "url") {
-    // Download only the needed section, not the whole six-hour VOD.
-    const part = join(tmpDir, `part-${m.peak}.mp4`);
-    const r = run("yt-dlp", [
-      "-q", "--no-warnings", "-f", "bv*[height<=1080]+ba/b[height<=1080]/b",
-      "--download-sections", `*${m.start}-${m.end}`, "--force-keyframes-at-cuts",
-      "--merge-output-format", "mp4", "-o", part, src.url,
-    ]);
+    const r = streamUrls(src);
     if (!r.ok) return r;
-    input = part; ss = 0;
+    for (const u of src.streams) inputs.push("-ss", String(m.start), "-i", u);
+  } else {
+    inputs.push("-ss", String(m.start), "-i", src.path);
   }
   const vf = videoFilter(opts.layout, opts.height);
-  const args = ["-hide_banner", "-loglevel", "error", "-y", "-ss", String(ss), "-i", input, "-t", String(m.end - m.start)];
-  if (vf) args.push(opts.layout === "blur" ? "-filter_complex" : "-vf", vf);
+  const args = ["-hide_banner", "-loglevel", "error", "-y", ...inputs, "-t", String(m.end - m.start)];
+  if (vf) args.push("-filter_complex", vf, "-map", "[vout]");
+  else args.push("-map", "0:v:0");
+  // audio from the second input when yt-dlp returned separate video and audio
+  args.push("-map", inputs.length > 4 ? "1:a:0?" : "0:a:0?");
   args.push("-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", outFile);
   return run("ffmpeg", args);
 }
@@ -330,10 +348,10 @@ function main() {
   const { moments, counts } = findMoments(chat, opts);
 
   mkdirSync(opts.out, { recursive: true });
-  const graph = chart(counts, opts.bucket, moments);
+  const graph = chart(counts, opts.bucket, moments, chat.start);
   writeFileSync(join(opts.out, "chart.txt"), graph + "\n");
 
-  console.log(`\n${chat.title ? chat.title + "\n" : ""}${chat.messages.length} messages over ${hms(chat.duration)}\n`);
+  console.log(`\n${chat.title ? chat.title + "\n" : ""}${chat.messages.length} messages from ${hms(chat.start)} to ${hms(chat.end)}\n`);
   console.log(graph + "\n");
 
   if (moments.length === 0) {
@@ -349,8 +367,6 @@ function main() {
     if (src.kind === "url" && !have("yt-dlp")) die("yt-dlp is not on the PATH (needed to fetch the VOD). Install it, or pass a local file.");
   }
 
-  const tmpDir = join(opts.out, ".parts");
-  if (src?.kind === "url") mkdirSync(tmpDir, { recursive: true });
 
   const report = [];
   moments.forEach((m, idx) => {
@@ -360,14 +376,13 @@ function main() {
     console.log(line + (said ? `\n     chat: ${said}` : ""));
     const entry = { file: opts.dryRun ? null : name, ...m, link: chat.vodId ? `https://www.twitch.tv/videos/${chat.vodId}?t=${twitchTime(m.start)}` : null };
     if (!opts.dryRun) {
-      const r = cutClip(src, m, join(opts.out, name), opts, tmpDir);
+      const r = cutClip(src, m, join(opts.out, name), opts);
       if (r.ok) console.log(`     saved ${join(opts.out, name)}`);
       else { console.log(`     FAILED: ${r.err}`); entry.file = null; entry.error = r.err; }
     }
     report.push(entry);
   });
 
-  if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
   writeFileSync(join(opts.out, "clips.json"), JSON.stringify({ source: opts.chat, options: opts, clips: report }, null, 2));
   const ok = report.filter((r) => r.file).length;
   console.log(`\n${opts.dryRun ? "Dry run, nothing cut." : `${ok}/${report.length} clips in ${opts.out}/`}  Details: ${join(opts.out, "clips.json")}`);
