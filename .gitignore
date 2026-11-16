@@ -1,7 +1,0 @@
-clips/
-*.mp4
-*_chat.json
-chat.json
-demo-chat.json
-node_modules/
-.DS_Store

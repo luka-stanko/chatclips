@@ -1,0 +1,17 @@
+{
+  "name": "chat-clips",
+  "version": "1.0.0",
+  "description": "Les meilleurs moments d'un live Twitch, trouvés par le chat, coupés en clips verticaux 9:16.",
+  "type": "module",
+  "bin": {
+    "chat-clips": "chat-clips.mjs"
+  },
+  "scripts": {
+    "test": "node test/test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["twitch", "clips", "chat", "highlights", "tiktok", "shorts", "reels", "ffmpeg", "gta6"],
+  "license": "MIT"
+}

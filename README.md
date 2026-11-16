@@ -1,160 +1,196 @@
 # chat-clips
 
-**The best clip finder isn't AI. It's chat.**
+**Les meilleurs moments d'un live Twitch, trouvés par le chat, coupés en clips verticaux.**
 
-When something crazy happens on stream, chat explodes: hundreds of "LMAO" in ten
-seconds. `chat-clips` reads a stream's whole chat, counts the messages every 10
-seconds, finds where chat spikes above its normal level, rewinds 20 seconds
-(chat reacts *after* the moment), and cuts each moment as a vertical 9:16 clip.
-
-One file. Zero npm dependencies. Free.
-
-```
-$ node chat-clips.mjs chat.json --vod 2345678901
-
-GTA RP, hour 4 of 6
-48211 messages over 06:02:13
-
-chat activity (busiest 10s bucket: 340 messages), numbers mark the clips
-▁▁▂▁▁▁▂▁▁▁▁▂▁▅█▁▁▁▁▂▁▁▁▁▁▁▁▁▂▁▁▁▁▆▃▁▂▁▁▁▁▁▁▁▁▁▁▂▁▆▃▁▁▁▁▂▁▁▁▂
-              1                  2               3
-
-#1  spike 01:32:40  score 11.9  340 msgs  ->  clip 01:32:20 to 01:33:05
-     chat: "LMAO" x61, "CLIP IT" x40, "NO WAY" x22
-     saved clips/clip-01-01-32-40.mp4
-...
-```
-
-## How it works
-
-1. **Get the chat.** [TwitchDownloader](https://github.com/lay295/TwitchDownloader)
-   (free, open source, MIT) exports the full chat of any Twitch VOD as JSON.
-2. **Count.** Messages are counted in 10 second buckets. Hype messages
-   (`LMAO`, `KEKW`, `CLIP IT`, `W`, `???` ...) count a bit extra.
-3. **Find the spikes.** Each bucket is compared with the five minutes of chat
-   around it (median and MAD, so a busy hour and a calm hour are each judged
-   against themselves). Buckets far above normal are moments.
-4. **Rewind.** Chat reacts a few seconds after the moment, so each clip starts
-   20 seconds before the spike and runs 45 seconds.
-5. **Cut vertical.** ffmpeg cuts the window and lays it out in 9:16, either the
-   full 16:9 frame over a blurred copy of itself (default) or a centre crop.
-   When the VOD is online, yt-dlp resolves its stream once and ffmpeg seeks
-   straight to each moment: only the needed seconds are fetched, never the
-   whole six-hour stream.
-
-## Install
-
-You need:
-
-- [Node.js](https://nodejs.org) 18 or newer
-- [ffmpeg](https://ffmpeg.org/download.html) on your PATH
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) on your PATH, only if the VOD is not
-  a local file
+Quand il se passe un truc de fou en live, le chat explose. `chat-clips` repère ces explosions et coupe chaque moment en clip 9:16, prêt pour TikTok, Reels et Shorts. Le clip commence 20 secondes avant que le chat réagisse, parce que le chat réagit toujours après coup.
 
 ```bash
-git clone https://github.com/luka-stanko/chatclips.git
-cd chatclips
-node chat-clips.mjs --help
+node chat-clips.mjs "https://www.twitch.tv/videos/123456789"
 ```
 
-Try it without downloading anything:
+Une commande, un dossier de clips.
+
+> **Ne clippe que les streamers qui l'autorisent.**
+
+---
+
+## Ce qu'il fait
+
+- Il **télécharge le chat** de la VOD avec [TwitchDownloader](https://github.com/lay295/TwitchDownloader) (gratuit, open source).
+- Il **repère les pics** : quand le chat écrit 3 fois plus que d'habitude, ou quand il **réagit** 3 fois plus que d'habitude (PTDR, MDR, KEKW, 😂, 🔥, « wesh », « no way », jajaja, kkkk…).
+- Il **marche aussi sur les très gros chats**. TwitchDownloader ne garde que 15 messages par seconde : sur un énorme live, le volume ne peut plus monter, mais la part de rires, si.
+- Il **fait passer après les votes du chat** : quand le streamer pose une question et que tout le monde répond « oui », « non » ou un prénom, le chat explose aussi, mais ce n'est pas un clip.
+- Il **ignore les bots** (Nightbot, StreamElements…), les commandes `!…` et les annonces d'abonnement. Une même personne compte au maximum 2 messages par tranche de 10 s : un spammeur seul ne crée pas de faux pic.
+- Il **télécharge seulement les moments trouvés** (30 s chacun), pas les 14 Go d'un live de 6 heures en 1080p.
+- Il **coupe chaque moment en 1080 × 1920**, en plein écran ou sur un fond flou, avec si tu veux **la face cam du streamer en bas** et le jeu en haut.
+
+## Installation (une seule fois)
+
+### 1. Ouvrir un terminal dans le dossier de chat-clips
+
+- **Mac** : ouvre l'app **Terminal**, tape `cd ` (avec un espace), glisse le dossier `chat-clips` dans la fenêtre, puis appuie sur Entrée.
+- **Windows 11** : dans l'Explorateur, clic droit sur le dossier `chat-clips` › **Ouvrir dans le Terminal**.
+
+Toutes les commandes ci-dessous se tapent dans ce terminal.
+
+### 2. Installer ce qu'il faut
+
+1. **Node.js** 18 ou plus : https://nodejs.org (bouton « LTS »).
+2. **ffmpeg** :
+   - **Mac** : installe d'abord Homebrew (https://brew.sh). À la fin, Homebrew affiche des lignes « Next steps » à copier dans le terminal : fais-le, sinon la commande `brew` reste introuvable. Ensuite :
+     ```bash
+     brew install ffmpeg
+     ```
+   - **Windows** :
+     ```powershell
+     winget install Gyan.FFmpeg
+     ```
+     Puis ferme le terminal et ouvres-en un nouveau.
+3. **chat-clips** : bouton vert **Code** › **Download ZIP** sur cette page, puis dézippe-le (ou `git clone`).
+4. **TwitchDownloaderCLI** : sur https://github.com/lay295/TwitchDownloader/releases, télécharge le zip **CLI** de ton système, dézippe-le, et mets `TwitchDownloaderCLI` dans le dossier `chat-clips` (sur Windows, son dossier dézippé peut rester tel quel à l'intérieur) :
+   - Mac Apple Silicon (M1, M2, M3, M4) : `TwitchDownloaderCLI-…-MacOSArm64.zip`
+   - Mac Intel : `TwitchDownloaderCLI-…-MacOS-x64.zip`
+   - Windows : `TwitchDownloaderCLI-…-Windows-x64.zip`
+
+   **Sur Mac**, autorise-le une fois (dans le terminal ouvert à l'étape 1) :
+   ```bash
+   chmod +x TwitchDownloaderCLI
+   xattr -c TwitchDownloaderCLI
+   ```
+
+## Utilisation
+
+**Tout en une commande.** Mets toujours le lien entre guillemets (les liens Twitch contiennent souvent `?` ou `&`) :
 
 ```bash
-node examples/make-demo-chat.mjs > demo-chat.json
-node chat-clips.mjs demo-chat.json --dry-run
+node chat-clips.mjs "https://www.twitch.tv/videos/123456789"
 ```
 
-## Usage
-
-**1. Download the chat** of a VOD with TwitchDownloader. In the app: *Chat
-Download*, paste the VOD link, format **JSON**. Or with the CLI:
+Le numéro de la VOD tout seul marche aussi :
 
 ```bash
-TwitchDownloaderCLI chatdownload --id 2345678901 -o chat.json
-
-# only part of a long VOD (use hh:mm:ss, e.g. hours 2 to 3:30)
-TwitchDownloaderCLI chatdownload --id 2345678901 -b 02:00:00 -e 03:30:00 -o chat.json
+node chat-clips.mjs 123456789
 ```
 
-A partial chat keeps its real VOD times, and the tool analyses that range only.
+Les clips arrivent dans le dossier `clips/`, avec le chat et la liste des moments (`moments.csv`). Pour un gros live, le chat met quelques minutes à se télécharger. Il est gardé : relancer avec d'autres options est ensuite immédiat.
 
-**2. Run the tool:**
+**Voir d'abord les moments**, sans télécharger de vidéo :
 
 ```bash
-# the VOD id is read from chat.json, only the clip sections are downloaded
-node chat-clips.mjs chat.json
-
-# or from a VOD you already downloaded
-node chat-clips.mjs chat.json --vod stream.mp4
-
-# just look at the spikes first, cut nothing
-node chat-clips.mjs chat.json --dry-run
+node chat-clips.mjs "https://www.twitch.tv/videos/123456789" --liste
 ```
 
-**3. Caption them.** The clips land in `clips/`, best first. Drop them into a
-captioning tool such as [OpenShorts](https://github.com/mutonby/openshorts)
-(open source) or your editor of choice.
+Chaque moment a un lien Twitch qui ouvre la VOD là où le clip commence, pour vérifier.
 
-### Options
+**Si tu as déjà le chat** (exporté en JSON par TwitchDownloader) :
 
-| Option | Default | What it does |
+```bash
+node chat-clips.mjs chat.json --telecharger
+```
+
+**Si tu as déjà la vidéo** :
+
+```bash
+node chat-clips.mjs chat.json --vod live.mp4
+```
+
+Si tu n'as gardé qu'un morceau du live, coupe le chat et la vidéo de la même façon avec les options `-b` et `-e` de TwitchDownloader. L'outil recale les temps tout seul.
+
+## Exemple
+
+Extrait d'un vrai lancement sur un live GTA RP de 6 h (nom de la chaîne masqué), avec `--nombre 4 --qualite 360p30` :
+
+```
+Chat : 22 118 messages (+ 749 de bots, de commandes ou d'annonces, ignorés) · chaîne …
+
+ #  Moment     Messages   × chat   × réactions   Le chat dit
+ 1  3:02:10          26   ×4.4     ×18.0        🤣, mdr, eh
+ 2  3:45:30          35   ×9.1     ×21.0        🤣, 😂, fou
+ 3  4:02:20          31   ×8.7     ×16.0        omg, ih, pain
+ 4  4:31:20          35   ×15.8    ×25.0        🤣, mdr, 😂
+
+Téléchargement des 4 moments (360p30) et découpe (plein écran 9:16) dans « clips »…
+  ✔ clip-01-3h02m10.mp4  (live 3:01:40 → 3:02:10)
+  ✔ clip-02-3h45m30.mp4  (live 3:45:00 → 3:45:30)
+  ✔ clip-03-4h02m20.mp4  (live 4:02:00 → 4:02:30)
+  ✔ clip-04-4h31m20.mp4  (live 4:30:50 → 4:31:20)
+
+4 clips prêts. La liste des moments est dans clips/moments.csv.
+```
+
+« × chat » : combien de fois plus le chat écrit que d'habitude (une réaction compte 1,5). « × réactions » : combien de fois plus il rit ou réagit que d'habitude.
+
+## La face cam du streamer
+
+Beaucoup de lives montrent le streamer dans un coin de l'image. Avec `--facecam`, le clip met **le jeu en haut et la face cam en bas** (1080 × 1920), pour voir la réaction du streamer en même temps que l'action :
+
+```bash
+node chat-clips.mjs "https://www.twitch.tv/videos/123456789" --facecam haut-gauche
+```
+
+Les clips gardent en haut la partie du jeu où la face cam ne se trouve pas, pour qu'elle ne soit pas montrée deux fois. Avec `--position`, c'est toi qui choisis le recadrage.
+
+**Vérifie d'abord le cadrage.** Chaque face cam a sa taille et sa place. `--facecam haut-gauche` en devine une (30 % de la largeur, en 16:9) :
+
+1. Lance la commande avec `--apercu` : l'outil télécharge un seul moment et fabrique `clips/apercu-facecam.png`, une image du live avec un **cadre rouge** autour de ce qu'il prend pour la face cam. Aucun clip n'est coupé.
+2. Le cadre est à côté ? Donne la place exacte, en % de l'image : `--facecam x,y,largeur,hauteur`. Par exemple `--facecam 1.6,2.3,29.5,29.5` : à 1,6 % du bord gauche, 2,3 % du haut, large de 29,5 % et haut de 29,5 %.
+3. Quand le cadre rouge entoure bien la face cam, relance **la même commande sans `--apercu`** : le chat est déjà téléchargé, ça part tout de suite.
+
+La face cam est agrandie pour remplir la largeur du clip : garde la qualité par défaut (1080p60), sinon elle sera floue. L'outil te prévient quand elle l'est.
+
+## Options
+
+| Option | Ce qu'elle fait | Par défaut |
 |---|---|---|
-| `--vod <x>` | id from chat.json | Local file, any URL yt-dlp reads, or a Twitch VOD id |
-| `--bucket <s>` | 10 | Seconds per counting bucket |
-| `--lead <s>` | 20 | Seconds to start before the spike |
-| `--length <s>` | 45 | Clip length |
-| `--top <n>` | 10 | Maximum number of clips |
-| `--gap <s>` | 90 | Minimum seconds between two clips |
-| `--min-score <z>` | 3 | How far above normal a spike must be. Lower it for small streams |
-| `--window <s>` | 300 | Seconds of surrounding chat that define "normal" |
-| `--keywords <list>` | built in | Comma list of hype words that count extra |
-| `--keyword-weight <n>` | 0.5 | Extra weight of a hype message |
-| `--layout <mode>` | blur | `blur`, `crop` or `none` |
-| `--height <px>` | 1920 | Output height (width is 9/16 of it) |
-| `--out <dir>` | clips | Output folder |
-| `--dry-run` | | Detect and report only |
+| `--liste` | Liste seulement les moments, sans télécharger de vidéo ni couper | |
+| `--nombre 10` | Nombre de clips au maximum | 10 |
+| `--avance 20` | Secondes gardées avant que le chat réagisse | 20 |
+| `--duree 30` | Durée de chaque clip | 30 s |
+| `--facecam haut-gauche` | Le jeu en haut, la **face cam** du streamer en bas. Où est-elle ? `haut-gauche`, `haut-droite`, `bas-gauche`, `bas-droite`, ou ses coordonnées `x,y,largeur,hauteur` en % de l'image | pas de face cam |
+| `--facecam-taille 30` | Avec un coin : largeur de la face cam, en % de la largeur de l'image | 30 |
+| `--apercu` | Avec `--facecam` : fabrique seulement l'image `apercu-facecam.png` (cadre rouge autour de la face cam), sans couper les clips | |
+| `--flou` | Garde toute l'image sur un fond flou (avec `--facecam` : pour la partie jeu) | plein écran |
+| `--position 50` | Où recadrer le jeu en plein écran : 0 = à gauche, 100 = à droite | 50 (centre) |
+| `--qualite 1080p60` | Qualité téléchargée | 1080p60 |
+| `--dossier clips` | Dossier de sortie | `clips` |
+| `--twitch <chemin>` | Où trouver TwitchDownloaderCLI | dossier de chat-clips |
+| `--telecharger` | Avec un `chat.json` : télécharge seulement les moments | |
+| `--vod live.mp4` | Avec un `chat.json` : coupe dans une vidéo déjà téléchargée | |
+| `--vod-complete` | La vidéo est le live entier, mais le chat a été coupé avec `-b` | |
+| `--seuil 3` | Un pic : 3 fois plus de messages, ou 3 fois plus de réactions, que d'habitude | 3 |
+| `--min 15` | Un pic doit compter au moins 15 messages | 15 |
+| `--fenetre 10` | Taille des tranches où on compte les messages | 10 s |
+| `--votes` | Garde les votes du chat au même rang que les autres pics | |
 
-### Output
+## Astuces
 
-- `clip-01-<hh-mm-ss>.mp4` ... the clips, best spike first, named after the
-  moment in the stream
-- `clips.json`: every clip with its start, end, score, message count, the most
-  repeated messages and a Twitch link at the right second
-- `chart.txt`: the chat activity over the whole stream
+- **Une facecam dans un coin** : le recadrage au centre la coupe. Utilise `--facecam` (voir juste en dessous) pour la mettre en bas du clip.
+- **Plusieurs caméras** : utilise `--flou` pour garder toute l'image, ou `--position 0` / `--position 100` pour cadrer à gauche ou à droite.
+- **Petit streamer, chat calme** : `--seuil 2 --min 8`.
+- **Trop de moments moyens** : `--nombre 5` garde seulement les plus forts.
+- **Un moment qui dure** (une course-poursuite, un fou rire) : `--duree 45`.
+- **« (vote ?) » dans la liste** : le chat répond surtout la même chose. Le streamer a sans doute posé une question. Ces pics passent après les autres.
+- **« cette VOD est réservée aux abonnés »** : TwitchDownloader ne peut pas la lire. Choisis une VOD publique.
+- **« cette VOD n'existe plus »** : les VOD ne restent sur Twitch que quelques jours ou semaines selon la chaîne. Clippe vite.
+- **Ctrl+C** arrête l'outil proprement : rien d'inachevé ne reste dans le dossier.
 
-### Other chat sources
+## Comment ça marche
 
-Any chat works if you convert it to a plain array:
+1. Les messages sont rangés par tranches de 10 secondes. Une réaction (rire, emoji, « wow », « wesh »…) compte une fois et demie.
+2. Le **rythme normal** est la médiane du chat sur 5 minutes de chaque côté. Il suit le live : un chat plus calme au début, plus actif à la fin. Le rythme normal des réactions est calculé pareil.
+3. Un **pic**, c'est une tranche d'au moins 15 messages, qui fait au moins 3 fois le rythme normal du chat, ou 3 fois celui des réactions. Quand le chat touche le plafond de TwitchDownloader (15 messages par seconde), il suffit que les réactions doublent.
+4. Un pic avec presque aucune réaction (moins de 12 %), surtout des réponses courtes (plus de 55 %) et souvent les mêmes est un **vote** : ses réponses ne comptent plus qu'à 20 %.
+5. Les tranches de pic qui se suivent forment un seul moment, et on garde les plus forts, sans que deux clips se chevauchent.
+6. Chaque clip commence 20 s avant que le chat se mette à réagir (jusqu'à 20 s plus tôt que le pic lui-même, si la réaction monte sur plusieurs tranches).
 
-```json
-[{ "t": 12.5, "msg": "LMAO" }, { "t": 13.1, "msg": "clip it" }]
+Testé sur 4 vrais lives (en français, anglais et espagnol, jusqu'à 137 000 messages, dont deux streamers à plus d'un million de vues), et sur un chat synthétique de 900 000 messages (620 Mo) : le fichier est lu par morceaux, sans limite de taille.
+
+## Tests
+
+```bash
+npm test
 ```
 
-`t` is the number of seconds since the start of the video.
+## Licence
 
-## Tested on a real stream
-
-90 minutes of a GTA RP stream (17,778 chat messages, downloaded in 47 s with
-TwitchDownloaderCLI 1.56.5): `--top 3` found a botched golf drive ("LOL SO
-BAD"), a "LOL" x30 burst and a "Classic" x21 moment, and cut the three clips
-straight from the online VOD in under 5 minutes on a small server, 1080x1920
-with sound.
-
-## Tuning tips
-
-- **Small stream, few clips found?** `--min-score 2 --bucket 15`.
-- **Too many clips from the same moment?** Raise `--gap`.
-- **The clip starts too early or too late?** Change `--lead`. 20 seconds fits
-  most Twitch chats; a stream with a long delay may need 30.
-- **Facecam on one side?** `--layout crop` keeps the centre; `blur` keeps the
-  whole frame.
-
-## Please clip responsibly
-
-Streams belong to the people who make them. Only clip creators who allow it,
-credit them, and follow Twitch's terms and each creator's own clipping rules.
-This tool finds moments; what you publish is on you.
-
-## License
-
-MIT. See [LICENSE](LICENSE).
+MIT. Fait par [@luka.stkn](https://www.instagram.com/luka.stkn/).
