@@ -14,6 +14,23 @@ Une commande, un dossier de clips.
 
 ---
 
+## Le plus simple : le donner à Claude Code
+
+> **Il te faut une IA pour le faire tourner.** chat-clips s'utilise depuis un terminal, avec quelques outils à installer. Le plus simple est de laisser une IA de code comme **Claude Code** (il faut un abonnement Claude) tout faire à ta place : télécharger l'outil, installer ce qu'il faut et lancer les commandes.
+
+1. Ouvre **Claude Code** sur ton ordinateur (dans le terminal ou dans VS Code), dans un dossier vide.
+2. Colle-lui ce message, avec le lien de ta VOD Twitch à la fin :
+
+   ```text
+   Télécharge l'outil https://github.com/luka-stanko/chatclips sur mon ordinateur, lis son README et installe tout ce qu'il lui faut (Node.js, ffmpeg, TwitchDownloaderCLI). Ensuite, trouve les meilleurs moments de cette VOD Twitch et coupe-les en clips verticaux. Explique-moi chaque étape simplement et demande-moi avant d'installer quoi que ce soit. Voici la VOD :
+   ```
+
+3. Réponds à ses questions. Les clips arrivent dans le dossier `clips/`.
+
+Tu préfères tout faire toi-même ? Suis l'installation à la main juste en dessous.
+
+---
+
 ## Ce qu'il fait
 
 - Il **télécharge le chat** de la VOD avec [TwitchDownloader](https://github.com/lay295/TwitchDownloader) (gratuit, open source).
